@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""3pi - رصيد فرع علي الصياد (C-0001/vaccine) من branch.stock.page (جلسة ويب، قراءة فقط عبر juleb_web.py
+"""3pi - رصيد فرع C-0001 من branch.stock.page (جلسة ويب، قراءة فقط عبر juleb_web.py
 المقيّد أصلًا بـALLOWED_MODELS). بموافقة المالك 2026-11-15 (نفس نمط C-0002).
 يكتب:
   out/data/store/stock.json   {qty: {pid: qty}, negative: [...], archived_negative: [...]}

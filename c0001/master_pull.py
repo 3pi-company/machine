@@ -16,9 +16,11 @@ import juleb_web as jw
 # تدرّج الحقول: نجرّب الأوسع الأول (تخصيصات جوليب العربية لو موجودة)، ولو JSON-RPC رفض حقل، ننزل للأضيق.
 TIERS = [
     ["id", "product_tmpl_id", "barcode", "default_code", "name", "categ_id", "j_name_ar", "j_brand",
-     "j_brand_ar", "list_price", "standard_price", "active", "sale_ok"],
+     "j_brand_ar", "list_price", "standard_price", "active", "sale_ok", "taxes_id", "has_sale_vat"],
+    ["id", "product_tmpl_id", "barcode", "default_code", "name", "categ_id", "j_name_ar", "j_brand",
+     "j_brand_ar", "list_price", "standard_price", "active", "sale_ok", "taxes_id"],
     ["id", "product_tmpl_id", "barcode", "default_code", "name", "categ_id", "list_price",
-     "standard_price", "active", "sale_ok"],
+     "standard_price", "active", "sale_ok", "taxes_id"],
     ["id", "barcode", "default_code", "name", "categ_id", "list_price", "standard_price", "active"],
 ]
 
@@ -67,6 +69,8 @@ def main():
                     "category": (cat[1].split(" / ")[-1] if isinstance(cat, list) and len(cat) > 1 else None),
                     "cost": p.get("standard_price") or 0,
                     "list_price": p.get("list_price") or 0,
+                    "taxes_id": p.get("taxes_id"),
+                    "has_sale_vat": p.get("has_sale_vat"),
                     "active": active,
                 })
             rep["total"] = len(items)

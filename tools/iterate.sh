@@ -36,6 +36,7 @@ c0001() {
   rm -rf "$ROOT/db1" "$CODE/c0001/out"; mkdir -p "$CODE/c0001/data/master"
   git clone -q --depth 1 --branch data "$R1" "$ROOT/db1" >>"$LOG" 2>&1 || { echo "c0001: clone-fail"; return 1; }
   cp_if db1/data/master/master_c0001.json "$CODE/c0001/data/master/"
+  mkdir -p "$CODE/c0001/data/store"; cp_if db1/data/store/stock.json "$CODE/c0001/data/store/"   # عشان تنبيه الهامش يتقصر على الأصناف المباعة أو اللي في رصيد الفرع (relevant_pids)
   ( cd "$CODE/c0001" && BACKFILL_DAYS=60 timeout 120 python pull_sales.py ) >>"$LOG" 2>&1 || true
   ( cd "$CODE/c0001" && timeout 120 python stock_pull.py ) >>"$LOG" 2>&1 || true
   O="$CODE/c0001/out/data"; mkdir -p db1/data/health db1/data/rest_store db1/data/store

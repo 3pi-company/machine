@@ -32,8 +32,11 @@ def _rday(s):
         return None, None
 
 
-def build(store, master, client, health):
-    """بيرجّع {مسار نسبي: محتوى} تحت data/store/."""
+def build(store, master, client, health, relevant_pids=None):
+    """بيرجّع {مسار نسبي: محتوى} تحت data/store/.
+    relevant_pids: لو الماستر كتالوج عام مش خاص بالفرع (زي C-0001: منتجات search_read بترجع كل منتجات جوليب
+    مش بس المسحوبة لهذا الفرع)، بنقصر تنبيه الهامش على الأصناف اللي اتباعت أو موجودة في رصيد الفرع بس،
+    عشان ما يتجمّعش آلاف التنبيهات لمنتجات الفرع ده أصلًا معندوش علاقة بيها."""
     files = defaultdict(list)
     month_of, first_seen = {}, {}
     for o in store.get("orders", {}).values():
@@ -68,7 +71,7 @@ def build(store, master, client, health):
         if pid in used:
             prods[pid] = {"code": it.get("code"), "n": name, "cat": cat, "cost": c, "price": p, "bc": it.get("barcode"),
                           "tax": it.get("taxes") or it.get("tax")}
-        if m is not None and m < 5 and it.get("active", True):
+        if m is not None and m < 5 and it.get("active", True) and (relevant_pids is None or pid in relevant_pids):
             alert.append({"pid": pid, "code": it.get("code"), "bc": it.get("barcode"), "n": name, "cat": cat,
                           "price": round(p, 2), "cost": round(c, 2), "m": round(m, 1)})
     for pid, info in (store.get("products_info") or {}).items():   # عملاء الجلسة (من غير ماستر): من بيانات الأصناف اللي اتباعت

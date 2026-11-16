@@ -153,7 +153,18 @@ def main():
             break
     if store_for_reports:
         import build_app_data
-        build_app_data.write(build_app_data.build(store_for_reports, master, "C-0001", rep), "out")
+        # الماستر هنا كتالوج جوليب العام (كل الصيدليات)، مش خاص بفرع C-0001؛ فنقصر تنبيه الهامش على الأصناف
+        # اللي اتباعت فعلًا أو موجودة في رصيد الفرع بس (relevant_pids) عشان منغرقش في آلاف الأصناف اللي
+        # الفرع ده معندوش علاقة بيها (موافقة المالك 2026-11-15، سحب الماستر لـC-0001).
+        relevant = {str(m2o(l.get("product_id"))) for l in store_for_reports.get("lines", {}).values()}
+        for p in ("data/store/stock.json", "out/data/store/stock.json"):
+            if os.path.exists(p):
+                try:
+                    relevant |= set(json.load(open(p, encoding="utf-8")).get("qty", {}).keys())
+                except Exception:
+                    pass
+                break
+        build_app_data.write(build_app_data.build(store_for_reports, master, "C-0001", rep, relevant_pids=relevant), "out")
     if store_for_reports:
         r = reports.build(store_for_reports, master, {"client": "C-0001"}, now=now)
         r["health"] = {k: rep.get(k) for k in ("result", "stopped", "requests_used", "recon", "alert", "run_at_utc")}

@@ -9,6 +9,21 @@ R1="https://x-access-token:${PUSH_TOKEN}@github.com/3pi-company/c0001-dashboard.
 cp_if() { [ -f "$1" ] && cp "$1" "$2"; }
 verdict() { grep -o '"result": *"[a-z_]*"' "$1" 2>/dev/null | head -1 | sed 's/.*: *//' || true; }
 
+hist() {  # $1 مجلد الفرع: بيحدّث لقطة قيمة المخزون اليومية data/store/stock_history.json (آخر قيمة في اليوم بتوقيت الرياض)
+  python3 - "$1" <<'PY' >>"$LOG" 2>&1 || true
+import json, os, sys, datetime
+d = sys.argv[1]; sp = os.path.join(d, "data/store/stock.json"); hp = os.path.join(d, "data/store/stock_history.json")
+try:
+    st = json.load(open(sp)); v = st["valuation"]
+except Exception:
+    sys.exit(0)
+h = json.load(open(hp)) if os.path.exists(hp) else {}
+day = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=3)).strftime("%Y-%m-%d")
+h[day] = {"total": v.get("total"), "by_category": v.get("by_category"), "unpriced": v.get("items_unpriced"), "at_utc": st.get("as_of_utc")}
+json.dump(h, open(hp, "w"), ensure_ascii=False, separators=(",", ":"))
+PY
+}
+
 push_data() {  # $1 مجلد الفرع، $2 الـremote
   ( cd "$1" && git config user.name "$GN" && git config user.email "$GE" && git add data
     if ! git diff --cached --quiet; then
@@ -28,6 +43,7 @@ c0002() {
   cp_if w2/out/data/rest_store/pos_store.json db2/data/rest_store/
   cp_if w2/out/data/health/sync.json db2/data/health/; cp_if w2/out/data/health/stock.json db2/data/health/
   [ -d w2/out/data/store ] && cp -r w2/out/data/store/. db2/data/store/
+  hist "$ROOT/db2"
   push_data "$ROOT/db2" "$R2"
   echo "c0002: $(verdict w2/out/data/health/sync.json)"
 }
@@ -43,6 +59,7 @@ c0001() {
   cp_if "$O/rest_store/pos_store.json" db1/data/rest_store/
   cp_if "$O/health/sync.json" db1/data/health/; cp_if "$O/health/stock.json" db1/data/health/
   [ -d "$O/store" ] && cp -r "$O/store/." db1/data/store/
+  hist "$ROOT/db1"
   push_data "$ROOT/db1" "$R1"
   echo "c0001: $(verdict "$O/health/sync.json")"
 }

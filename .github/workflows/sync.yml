@@ -1,118 +1,38 @@
-# محرك السحب العام (كود بس، صفر بيانات عميل في هذا الريبو). كل 15 دقيقة: يسحب جوليب لصالح C-0002
-# (C-0002) وC-0001، يكتب الناتج في فرع data بتاع الريبو الخاص بكل عميل، ويطلب منه
-# يبني لوحته وينشرها (بصفر طلبات جوليب هناك). لا pull_request من فورك هنا = الأسرار محمية.
+# حلقة السحب المركزية لجوليب (C-0002 وC-0001): كود بس، صفر بيانات عميل. دورة كل 10 دقايق جوه تشغيلة واحدة (حوالي 5 ساعات ونص)
+# وبتطلق اللي بعدها بنفسها. الـcron هنا احتياطي بس (GitHub بيتأخر فيه). التفاصيل: tools/loop.sh وtools/iterate.sh.
+# قرار المسؤول 2026-11-16: ممنوع تأخير تحديث اللوحات. السجل العام صامت (سطر لكل عميل).
 name: sync
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "23 * * * *"
   workflow_dispatch:
 concurrency:
-  group: machine-sync
+  group: machine-loop
   cancel-in-progress: false
+permissions:
+  contents: read
+  actions: write
 jobs:
-  c0002:
+  loop:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 350
+    env:
+      PUSH_TOKEN: ${{ secrets.PUSH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      PLATFORM_PAUSE: ${{ vars.PLATFORM_PAUSE }}
+      CLIENT_C0002_JULEB_URL: ${{ secrets.CLIENT_C0002_JULEB_URL }}
+      CLIENT_C0002_JULEB_API_KEY: ${{ secrets.CLIENT_C0002_JULEB_API_KEY }}
+      CLIENT_C0002_JULEB_DB: ${{ secrets.CLIENT_C0002_JULEB_DB }}
+      CLIENT_C0002_JULEB_USER: ${{ secrets.CLIENT_C0002_JULEB_USER }}
+      CLIENT_C0002_JULEB_PASS: ${{ secrets.CLIENT_C0002_JULEB_PASS }}
+      CLIENT_C0001_JULEB_URL: ${{ secrets.CLIENT_C0001_JULEB_URL }}
+      CLIENT_C0001_JULEB_DB: ${{ secrets.CLIENT_C0001_JULEB_DB }}
+      CLIENT_C0001_JULEB_USER: ${{ secrets.CLIENT_C0001_JULEB_USER }}
+      CLIENT_C0001_JULEB_PASS: ${{ secrets.CLIENT_C0001_JULEB_PASS }}
     steps:
       - uses: actions/checkout@v4
         with: { path: code }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - name: Load store from c0002-dashboard data branch
-        run: |
-          set -e
-          R="https://x-access-token:${{ secrets.PUSH_TOKEN }}@github.com/3pi-company/c0002-dashboard.git"
-          git clone -q --depth 1 --branch data "$R" databranch
-          mkdir -p work/data/rest_store work/data/master
-          cp databranch/data/rest_store/pos_store.json work/data/rest_store/ 2>/dev/null || true
-          cp databranch/data/master/master_c0002.json work/data/master/ 2>/dev/null || true
-          cp databranch/data/health/sync.json work/prev_health.json 2>/dev/null || true
-      - name: Sync (GET only)
-        id: sync
-        working-directory: work
-        env:
-          CLIENT_C0002_JULEB_URL: ${{ secrets.CLIENT_C0002_JULEB_URL }}
-          CLIENT_C0002_JULEB_API_KEY: ${{ secrets.CLIENT_C0002_JULEB_API_KEY }}
-          PLATFORM_PAUSE: ${{ vars.PLATFORM_PAUSE }}
-        run: python ../code/c0002/sync.py
-        continue-on-error: true
-      - name: Branch stock (search_read on branch.stock.page only)
-        working-directory: work
-        env:
-          CLIENT_C0002_JULEB_URL: ${{ secrets.CLIENT_C0002_JULEB_URL }}
-          CLIENT_C0002_JULEB_DB: ${{ secrets.CLIENT_C0002_JULEB_DB }}
-          CLIENT_C0002_JULEB_USER: ${{ secrets.CLIENT_C0002_JULEB_USER }}
-          CLIENT_C0002_JULEB_PASS: ${{ secrets.CLIENT_C0002_JULEB_PASS }}
-          PLATFORM_PAUSE: ${{ vars.PLATFORM_PAUSE }}
-        run: python ../code/c0002/stock_pull.py
-        continue-on-error: true
-      - name: Push raw store + health to c0002-dashboard (data branch), then dispatch build+deploy
-        if: always()
-        run: |
-          set -e
-          R="https://x-access-token:${{ secrets.PUSH_TOKEN }}@github.com/3pi-company/c0002-dashboard.git"
-          git -C databranch config user.name "3pi"; git -C databranch config user.email "3pi-company@users.noreply.github.com"
-          mkdir -p databranch/data/health databranch/data/rest_store databranch/data/store
-          [ -f work/out/data/rest_store/pos_store.json ] && cp work/out/data/rest_store/pos_store.json databranch/data/rest_store/
-          [ -f work/out/data/health/sync.json ] && cp work/out/data/health/sync.json databranch/data/health/
-          [ -f work/out/data/health/stock.json ] && cp work/out/data/health/stock.json databranch/data/health/
-          [ -f work/out/data/store/stock.json ] && cp work/out/data/store/stock.json databranch/data/store/
-          cd databranch && git add data
-          if ! git diff --cached --quiet; then
-            git commit -q -m "machine sync ${GITHUB_RUN_ID}"
-            git push -q "$R" HEAD:data || (git pull -q --rebase "$R" data && git push -q "$R" HEAD:data)
-            curl -s -X POST -H "Authorization: Bearer ${{ secrets.PUSH_TOKEN }}" -H "Accept: application/vnd.github+json" \
-              https://api.github.com/repos/3pi-company/c0002-dashboard/dispatches -d '{"event_type":"data-updated"}'
-          fi
-
-  c0001:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with: { path: code }
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - name: Load master from c0001-dashboard data branch (لو موجود)
-        run: |
-          R="https://x-access-token:${{ secrets.PUSH_TOKEN }}@github.com/3pi-company/c0001-dashboard.git"
-          git clone -q --depth 1 --branch data "$R" c0001data
-          mkdir -p code/c0001/data/master
-          cp c0001data/data/master/master_c0001.json code/c0001/data/master/ 2>/dev/null || true
-      - name: Sync (read-only web session)
-        working-directory: code/c0001
-        env:
-          CLIENT_C0001_JULEB_URL: ${{ secrets.CLIENT_C0001_JULEB_URL }}
-          CLIENT_C0001_JULEB_DB: ${{ secrets.CLIENT_C0001_JULEB_DB }}
-          CLIENT_C0001_JULEB_USER: ${{ secrets.CLIENT_C0001_JULEB_USER }}
-          CLIENT_C0001_JULEB_PASS: ${{ secrets.CLIENT_C0001_JULEB_PASS }}
-          BACKFILL_DAYS: "60"
-        run: python pull_sales.py
-        continue-on-error: true
-      - name: Branch stock (search_read on branch.stock.page only)
-        working-directory: code/c0001
-        env:
-          CLIENT_C0001_JULEB_URL: ${{ secrets.CLIENT_C0001_JULEB_URL }}
-          CLIENT_C0001_JULEB_DB: ${{ secrets.CLIENT_C0001_JULEB_DB }}
-          CLIENT_C0001_JULEB_USER: ${{ secrets.CLIENT_C0001_JULEB_USER }}
-          CLIENT_C0001_JULEB_PASS: ${{ secrets.CLIENT_C0001_JULEB_PASS }}
-        run: python stock_pull.py
-        continue-on-error: true
-      - name: Push raw store to c0001-dashboard (data branch), then dispatch build+deploy
-        if: always()
-        run: |
-          set -e
-          R="https://x-access-token:${{ secrets.PUSH_TOKEN }}@github.com/3pi-company/c0001-dashboard.git"
-          git -C c0001data config user.name "3pi"; git -C c0001data config user.email "3pi-company@users.noreply.github.com"
-          mkdir -p c0001data/data/rest_store c0001data/data/health c0001data/data/store
-          [ -f code/c0001/out/data/rest_store/pos_store.json ] && cp code/c0001/out/data/rest_store/pos_store.json c0001data/data/rest_store/
-          [ -f code/c0001/out/data/health/sync.json ] && cp code/c0001/out/data/health/sync.json c0001data/data/health/
-          [ -f code/c0001/out/data/health/stock.json ] && cp code/c0001/out/data/health/stock.json c0001data/data/health/
-          [ -f code/c0001/out/data/store/stock.json ] && cp code/c0001/out/data/store/stock.json c0001data/data/store/
-          cd c0001data && git add data
-          if ! git diff --cached --quiet; then
-            git commit -q -m "machine sync ${GITHUB_RUN_ID}"
-            git push -q "$R" HEAD:data || (git pull -q --rebase "$R" data && git push -q "$R" HEAD:data)
-            curl -s -X POST -H "Authorization: Bearer ${{ secrets.PUSH_TOKEN }}" -H "Accept: application/vnd.github+json" \
-              https://api.github.com/repos/3pi-company/c0001-dashboard/dispatches -d '{"event_type":"data-updated"}'
-          fi
+      - name: Loop
+        run: bash code/tools/loop.sh

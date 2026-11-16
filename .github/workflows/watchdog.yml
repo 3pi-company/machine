@@ -1,0 +1,48 @@
+# مراقب الحلقة: لو آخر مزامنة أقدم من 25 دقيقة (أو الحلقة مش شغالة)، بيلغي التشغيلات العالقة ويبدأ حلقة جديدة. الحلقة اللي بتعلّق من غير خطأ
+# مشكلة معروفة، فالمراقب بيقيس عمر البيانات مش لون التشغيلة. السجل صامت.
+name: watchdog
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+concurrency:
+  group: machine-watchdog
+  cancel-in-progress: false
+permissions:
+  contents: read
+  actions: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PUSH_TOKEN: ${{ secrets.PUSH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check freshness
+        run: |
+          AGE=$(python3 - <<'PY'
+          import json, os, urllib.request
+          from datetime import datetime, timezone
+          ages = []
+          for repo in ("c0001-dashboard", "c0002-dashboard"):
+              try:
+                  req = urllib.request.Request(f"https://api.github.com/repos/3pi-company/{repo}/contents/data/health/sync.json?ref=data",
+                      headers={"Authorization": "Bearer " + os.environ["PUSH_TOKEN"], "Accept": "application/vnd.github.raw", "User-Agent": "3pi-watchdog"})
+                  t = json.loads(urllib.request.urlopen(req, timeout=20).read()).get("run_at_utc")
+                  ages.append(int((datetime.now(timezone.utc) - datetime.strptime(t, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds() // 60))
+              except Exception:
+                  ages.append(9999)
+          print(max(ages))
+          PY
+          )
+          echo "oldest sync age (min): $AGE"
+          if [ "$AGE" -gt 25 ]; then
+            for st in in_progress queued; do
+              for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sync.yml/runs?status=$st" --jq '.workflow_runs[].id'); do
+                gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/cancel" >/dev/null 2>&1 || true
+              done
+            done
+            sleep 20
+            gh api -X POST "repos/$GITHUB_REPOSITORY/actions/workflows/sync.yml/dispatches" -f ref=main >/dev/null && echo "restarted loop"
+          fi

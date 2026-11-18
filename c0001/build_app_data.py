@@ -95,10 +95,6 @@ def build(store, master, client, health, relevant_pids=None):
         "products.json": prods,
         "margin_alert.json": sorted(alert, key=lambda x: x["m"]),
     })
-    its = [i for i in (master or {}).get("items", []) if i.get("active", True)]
-    if its:   # عدد الأصناف في ماستر العميل (طلب المسؤول 2026-11-18): كارت جنب قيمة المخزون
-        out["master_stats.json"] = {"total": len(its), "with_barcode": sum(1 for i in its if i.get("barcode")),
-                                    "drugs": sum(1 for i in its if i.get("category") == "Drugs")}
     return out
 
 
